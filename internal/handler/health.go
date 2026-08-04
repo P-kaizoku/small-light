@@ -36,7 +36,7 @@ func (h *Health) Check(w http.ResponseWriter, r *http.Request) {
 		code = http.StatusServiceUnavailable
 	}
 
-	if err := h.rdb.Ping(ctx); err != nil {
+	if err := h.rdb.Ping(ctx).Err(); err != nil {
 		h.logger.Warn("redis health chk failed", "error", err)
 		components["redis"] = "DOWN"
 		status = "degraded"
