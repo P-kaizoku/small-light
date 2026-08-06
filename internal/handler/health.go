@@ -43,7 +43,7 @@ func (h *Health) Check(w http.ResponseWriter, r *http.Request) {
 		code = http.StatusServiceUnavailable
 	}
 
-	WriteJSON(w, code, map[string]any{
+	writeJSON(w, code, map[string]any{
 		"status":     status,
 		"components": components,
 		"uptime_sec": time.Since(h.start).Seconds(),
