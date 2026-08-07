@@ -1,0 +1,1 @@
+CREATE SEQUENCE link_seq;

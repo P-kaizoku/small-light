@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/P-kaizoku/small-light/internal/config"
+	"github.com/P-kaizoku/small-light/internal/database"
 	"github.com/P-kaizoku/small-light/internal/logger"
 	"github.com/P-kaizoku/small-light/internal/server"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,6 +34,14 @@ func main() {
 
 	// closes the pool
 	defer pool.Close()
+
+	// apply migrations before serving
+	migrateCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := database.RunMigrations(migrateCtx, pool); err != nil {
+		log.Error("migrations failed", "error", err)
+		os.Exit(1)
+	}
 
 	//creating the redis client by passing the creds using cfg
 	rdb := redis.NewClient(&redis.Options{
