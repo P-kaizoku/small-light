@@ -1,0 +1,6 @@
+.git
+bin/
+PRD.md
+docker-compose.yml
+Makefile
+*.md
