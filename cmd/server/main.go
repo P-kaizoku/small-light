@@ -9,8 +9,11 @@ import (
 
 	"github.com/P-kaizoku/small-light/internal/config"
 	"github.com/P-kaizoku/small-light/internal/database"
+	"github.com/P-kaizoku/small-light/internal/handler"
 	"github.com/P-kaizoku/small-light/internal/logger"
+	"github.com/P-kaizoku/small-light/internal/repository"
 	"github.com/P-kaizoku/small-light/internal/server"
+	"github.com/P-kaizoku/small-light/internal/service"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -55,8 +58,15 @@ func main() {
 	defer rdb.Close()
 
 	// make the server
-	//
-	srv := server.New(cfg, log, pool, rdb)
+	userRepo := repository.NewUserRepository(pool)
+	linkRepo := repository.NewLinkRepository(pool)
+
+	authSvc := service.NewAuthService(userRepo, []byte(cfg.JWTSecret), cfg.JWTTTL)
+	linkSvc := service.NewLinkService(linkRepo, cfg.DefaultLinkTTL)
+
+	h := handler.New(authSvc, linkSvc, cfg.DefaultLinkTTL, log)
+
+	srv := server.New(cfg, log, pool, rdb, h)
 
 	// make a context to chk for interuption nd syscall
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
