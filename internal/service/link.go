@@ -5,17 +5,10 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/P-kaizoku/small-light/internal/cache"
 	"github.com/P-kaizoku/small-light/internal/model"
 	"github.com/google/uuid"
 )
-
-// NOTE ON IMPORTS: when you fill in the bodies below, add this import to this
-// file:
-//
-//	"net/url"
-//
-// It is intentionally absent right now so the scaffold compiles with empty
-// bodies.
 
 // LinkStore is the persistence surface LinkService needs. Defined here so
 // LinkService is testable against a fake. *repository.LinkRepository satisfies it.
@@ -31,10 +24,12 @@ type LinkStore interface {
 type LinkService struct {
 	links      LinkStore
 	defaultTTL time.Duration
+	cache      *cache.Link
+	clicks     *cache.ClickCounter
 }
 
-func NewLinkService(links LinkStore, defaultTTL time.Duration) *LinkService {
-	return &LinkService{links: links, defaultTTL: defaultTTL}
+func NewLinkService(links LinkStore, defaultTTL time.Duration, linkCache *cache.Link, clicks *cache.ClickCounter) *LinkService {
+	return &LinkService{links: links, defaultTTL: defaultTTL, cache: linkCache, clicks: clicks}
 }
 
 // validateURL returns a normalized URL or ErrInvalidURL.
@@ -59,12 +54,6 @@ func validateURL(raw string) (string, error) {
 }
 
 // Create shortens a URL and returns the stored link.
-//
-//  1. url, err := validateURL(raw).
-//  2. Build &model.Link{OwnerID: ownerID, OriginalURL: url,
-//     ExpiresAt: time.Now().Add(s.defaultTTL)}.
-//  3. return s.links.Create(ctx, link). The repo assigns short_code,
-//     click_count and timestamps, and returns the complete link.
 func (s *LinkService) Create(ctx context.Context, ownerID uuid.UUID, raw string) (*model.Link, error) {
 	u, err := validateURL(raw)
 	if err != nil {
@@ -104,42 +93,60 @@ func (s *LinkService) Get(ctx context.Context, id, ownerID uuid.UUID) (*model.Li
 // The repo guards ownership and returns ErrNotFound when the link doesn't exist
 // or isn't yours.
 func (s *LinkService) Update(ctx context.Context, id, ownerID uuid.UUID, raw string, expiresAt time.Time) (*model.Link, error) {
-	url, err := validateURL(raw)
+	u, err := validateURL(raw)
 	if err != nil {
 		return nil, err
 	}
 
-	updatedLink, err := s.links.Update(ctx, id, ownerID, url, expiresAt)
+	updatedLink, err := s.links.Update(ctx, id, ownerID, u, expiresAt)
 	if err != nil {
 		return nil, err
 	}
 
+	s.cache.Delete(ctx, updatedLink.ShortCode)
 	return updatedLink, nil
 }
 
-// Delete soft-deletes one of the owner's links by id.
-// Thin passthrough to s.links.SoftDelete (ownership + ErrNotFound handled there).
+// Delete soft-deletes one of the owner's links by id, then drops its cached
+// entry so the redirect stops resolving.
 func (s *LinkService) Delete(ctx context.Context, id, ownerID uuid.UUID) error {
-	err := s.links.SoftDelete(ctx, id, ownerID)
+	link, err := s.links.GetByID(ctx, id, ownerID)
 	if err != nil {
 		return err
 	}
+	if err := s.links.SoftDelete(ctx, id, ownerID); err != nil {
+		return err
+	}
 
+	s.cache.Delete(ctx, link.ShortCode)
 	return nil
 }
 
-// Resolve looks up a short code for the redirect handler.
-//
-//  1. link, err := s.links.GetByShortCode(ctx, code); propagate err.
-//  2. if time.Now().After(link.ExpiresAt) return ErrLinkExpired.
-//  3. Return the link; the handler will 302 to link.OriginalURL.
+// Resolve looks up a short code for the redirect handler, caching the result
+// on a miss. Both paths re-check expiry, then record the click in Redis.
 func (s *LinkService) Resolve(ctx context.Context, code string) (*model.Link, error) {
-	link, err := s.links.GetByShortCode(ctx, code)
+	link, err := s.getCached(ctx, code)
 	if err != nil {
 		return nil, err
 	}
 	if time.Now().After(link.ExpiresAt) {
 		return nil, ErrLinkExpired
 	}
+
+	s.clicks.Increment(ctx, link.ID)
+	return link, nil
+}
+
+// getCached returns the link from Redis or, on miss, from Postgres and warms
+// the cache. Redis failures degrade to a miss — never a failed request.
+func (s *LinkService) getCached(ctx context.Context, code string) (*model.Link, error) {
+	if link, ok := s.cache.Get(ctx, code); ok {
+		return link, nil
+	}
+	link, err := s.links.GetByShortCode(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	s.cache.Set(ctx, code, link)
 	return link, nil
 }

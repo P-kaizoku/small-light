@@ -114,3 +114,16 @@ func (r *LinkRepository) SoftDelete(ctx context.Context, id, ownerID uuid.UUID) 
 	}
 	return nil
 }
+
+// ApplyClickDeltas applies worker-flushed click deltas. Rows already soft
+// deleted are skipped by the WHERE clause, so a lingering counter for a dead
+// link is a harmless no-op.
+func (r *LinkRepository) ApplyClickDeltas(ctx context.Context, deltas map[uuid.UUID]int64) error {
+	for id, delta := range deltas {
+		query := `UPDATE links SET click_count = click_count + $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL`
+		if _, err := r.pool.Exec(ctx, query, id, delta); err != nil {
+			return fmt.Errorf("apply click delta: %w", err)
+		}
+	}
+	return nil
+}
