@@ -3,7 +3,6 @@ package middleware
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -39,9 +38,7 @@ func RequireAuth(auth *service.AuthService) func(http.Handler) http.Handler {
 // unauthorized writes the shared 401 response inline (this package cannot use
 // handler.writeJSON, which is unexported in another package).
 func unauthorized(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+	writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 }
 
 // UserID extracts the authenticated user's id from the context, returning
