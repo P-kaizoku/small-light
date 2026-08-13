@@ -17,19 +17,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// NOTE ON IMPORTS: when you fill in the bodies below, add these imports to this
-// file:
-//
-//	"errors"
-//	"fmt"
-//	"mail"
-//	"strings"
-//	"golang.org/x/crypto/bcrypt"
-//	"github.com/P-kaizoku/small-light/internal/repository"
-//
-// They are intentionally absent right now so the scaffold compiles with empty
-// bodies.
-
 // UserStore is the persistence surface AuthService needs. It is defined here
 // (at the consumer) so AuthService can be tested against a fake that never
 // touches a real database. *repository.UserRepository satisfies it.
@@ -60,9 +47,6 @@ func NewAuthService(users UserStore, secret []byte, ttl time.Duration) *AuthServ
 }
 
 // HashPassword returns a bcrypt hash of password.
-//
-// bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost). It never
-// fails in practice but always propagate the error anyway.
 func HashPassword(password string) (string, error) {
 	hashPass, err := bcrypt.GenerateFromPassword([]byte(password), 10)
 	if err != nil {
@@ -72,20 +56,12 @@ func HashPassword(password string) (string, error) {
 }
 
 // VerifyPassword reports whether password matches a bcrypt hash.
-//
-// bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil.
 func VerifyPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
-// GenerateToken mints a signed HS256 JWT for the given user.
-//
-// Build a Claims value:
-//   - UserID: the id argument
-//   - RegisteredClaims: Issuer = jwtIssuer, Subject = userID.String(),
-//     IssuedAt = now, ExpiresAt = now.Add(s.ttl)   (now := time.Now())
-//
-// then jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.secret).
+// GenerateToken mints a signed HS256 JWT for the given user. The claims carry
+// the user id plus the registered fields: issuer, subject, issued-at, expiry.
 func (s *AuthService) GenerateToken(userID uuid.UUID) (string, error) {
 	now := time.Now()
 	claims := Claims{
@@ -105,13 +81,6 @@ func (s *AuthService) GenerateToken(userID uuid.UUID) (string, error) {
 }
 
 // ParseToken validates signature, expiry and issuer, and returns the claims.
-//
-// Use jwt.ParseWithClaims(token, &Claims{}, keyfunc) where keyfunc returns
-// s.secret, plus the options:
-//   - jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()})
-//   - jwt.WithIssuer(jwtIssuer)
-//
-// Return an error if parsing fails or token.Valid is false.
 func (s *AuthService) ParseToken(tokenString string) (*Claims, error) {
 	var claims Claims
 	token, err := jwt.ParseWithClaims(tokenString, &claims, func(*jwt.Token) (any, error) {
@@ -127,15 +96,9 @@ func (s *AuthService) ParseToken(tokenString string) (*Claims, error) {
 	return &claims, nil
 }
 
-// Register creates a user and returns it.
-//
-//  1. Normalize the email: strings.ToLower(strings.TrimSpace(email)).
-//  2. Validate: email must pass mail.ParseAddress and len(password) >=
-//     minPasswordLen; otherwise return ErrInvalidInput.
-//  3. hash, err := HashPassword(password); propagate err.
-//  4. user, err := s.users.Create(ctx, email, hash); propagate err.
-//  5. If errors.Is(err, repository.ErrConflict), return ErrDuplicateEmail
-//     instead of the raw conflict.
+// Register creates a user and returns it. The email is normalized (lowercased,
+// trimmed) before validation, and a duplicate email surfaces as
+// ErrDuplicateEmail instead of the repository's raw conflict.
 func (s *AuthService) Register(ctx context.Context, email, password string) (*model.User, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
 
@@ -163,14 +126,10 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (*mo
 
 // Login verifies credentials and returns the user on success.
 //
-//  1. Normalize the email EXACTLY like Register does (otherwise logins for
-//     "Foo@Bar.com" will never match the stored "foo@bar.com").
-//  2. user, err := s.users.GetByEmail(ctx, email); propagate err.
-//  3. If errors.Is(err, repository.ErrNotFound) return ErrInvalidCredentials.
-//     Never reveal whether the email exists.
-//  4. If !VerifyPassword(user.PasswordHash, password) return
-//     ErrInvalidCredentials.
-//  5. Return the user.
+// The email is normalized exactly like Register does, otherwise logins for
+// "Foo@Bar.com" would never match the stored "foo@bar.com". An unknown email
+// and a wrong password both surface as ErrInvalidCredentials so the response
+// never reveals whether an email is registered.
 func (s *AuthService) Login(ctx context.Context, email, password string) (*model.User, error) {
 
 	email = strings.ToLower(strings.TrimSpace(email))
