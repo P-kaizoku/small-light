@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/P-kaizoku/small-light/internal/cache"
 	"github.com/P-kaizoku/small-light/internal/config"
 	"github.com/P-kaizoku/small-light/internal/database"
 	"github.com/P-kaizoku/small-light/internal/handler"
@@ -14,6 +15,7 @@ import (
 	"github.com/P-kaizoku/small-light/internal/repository"
 	"github.com/P-kaizoku/small-light/internal/server"
 	"github.com/P-kaizoku/small-light/internal/service"
+	"github.com/P-kaizoku/small-light/internal/worker"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -61,8 +63,11 @@ func main() {
 	userRepo := repository.NewUserRepository(pool)
 	linkRepo := repository.NewLinkRepository(pool)
 
+	linkCache := cache.NewLink(rdb)
+	clickCounter := cache.NewClickCounter(rdb)
+
 	authSvc := service.NewAuthService(userRepo, []byte(cfg.JWTSecret), cfg.JWTTTL)
-	linkSvc := service.NewLinkService(linkRepo, cfg.DefaultLinkTTL)
+	linkSvc := service.NewLinkService(linkRepo, cfg.DefaultLinkTTL, linkCache, clickCounter)
 
 	h := handler.New(authSvc, linkSvc, cfg.DefaultLinkTTL, log)
 
@@ -72,6 +77,16 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	// clean up func
 	defer stop()
+
+	// click flush worker — drains Redis counters into Postgres every
+	// cfg.ClickFlushInterval and once more on shutdown; the done channel lets
+	// shutdown wait for that final flush so no clicks are lost.
+	clickWorker := worker.NewClicks(clickCounter, linkRepo, log, cfg.ClickFlushInterval)
+	workerDone := make(chan struct{})
+	go func() {
+		defer close(workerDone)
+		clickWorker.Run(ctx)
+	}()
 
 	// error channel to pass error
 	errCh := make(chan error, 1)
@@ -92,6 +107,7 @@ func main() {
 			log.Error("error in shutting down gracefully", "error", err)
 			os.Exit(1)
 		}
+		<-workerDone
 		log.Info("server stopped cleanly")
 
 	}
