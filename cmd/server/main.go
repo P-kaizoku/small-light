@@ -88,6 +88,16 @@ func main() {
 		clickWorker.Run(ctx)
 	}()
 
+	// cleanup worker — soft-deletes links past their expires_at every
+	// cfg.LinkCleanupInterval and once more on shutdown; same done-channel
+	// wait pattern so the final purge completes before we exit.
+	cleanupWorker := worker.NewCleanup(linkRepo, log, cfg.LinkCleanupInterval)
+	cleanupDone := make(chan struct{})
+	go func() {
+		defer close(cleanupDone)
+		cleanupWorker.Run(ctx)
+	}()
+
 	// error channel to pass error
 	errCh := make(chan error, 1)
 	go func() {
@@ -108,6 +118,7 @@ func main() {
 			os.Exit(1)
 		}
 		<-workerDone
+		<-cleanupDone
 		log.Info("server stopped cleanly")
 
 	}

@@ -8,34 +8,36 @@ import (
 )
 
 type Config struct {
-	Port               string
-	AppEnv             string
-	LogLevel           string
-	DatabaseURL        string
-	RedisAddr          string
-	RedisPassword      string
-	RedisDB            int
-	ShortURLBase       string
-	DefaultLinkTTL     time.Duration
-	ClickFlushInterval time.Duration
-	JWTSecret          string
-	JWTTTL             time.Duration
+	Port                string
+	AppEnv              string
+	LogLevel            string
+	DatabaseURL         string
+	RedisAddr           string
+	RedisPassword       string
+	RedisDB             int
+	ShortURLBase        string
+	DefaultLinkTTL      time.Duration
+	ClickFlushInterval  time.Duration
+	LinkCleanupInterval time.Duration
+	JWTSecret           string
+	JWTTTL              time.Duration
 }
 
 func Load() Config {
 	return Config{
-		Port:               envOr("PORT", "8080"),
-		AppEnv:             envOr("APP_ENV", "development"),
-		LogLevel:           envOr("LOG_LEVEL", "info"),
-		DatabaseURL:        envOr("DATABASE_URL", "postgres://myuser:mysecretpassword@localhost:5432/smalllight"),
-		RedisAddr:          envOr("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:      envOr("REDIS_PASSWORD", "myredispassword"),
-		RedisDB:            envInt("REDIS_DB", 0),
-		ShortURLBase:       envOr("SHORT_URL_BASE", "http://localhost:8080"),
-		DefaultLinkTTL:     envDuration("DEFAULT_LINK_TTL", 168*time.Hour),
-		ClickFlushInterval: envDuration("CLICK_FLUSH_INTERVAL", 30*time.Second),
-		JWTSecret:          envOr("JWT_SECRET", "dev-jwt-secret-change-me"),
-		JWTTTL:             envDuration("JWT_TTL", 24*time.Hour),
+		Port:                envOr("PORT", "8080"),
+		AppEnv:              envOr("APP_ENV", "development"),
+		LogLevel:            envOr("LOG_LEVEL", "info"),
+		DatabaseURL:         envOr("DATABASE_URL", "postgres://myuser:mysecretpassword@localhost:5432/smalllight"),
+		RedisAddr:           envOr("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:       envOr("REDIS_PASSWORD", "myredispassword"),
+		RedisDB:             envInt("REDIS_DB", 0),
+		ShortURLBase:        envOr("SHORT_URL_BASE", "http://localhost:8080"),
+		DefaultLinkTTL:      envDuration("DEFAULT_LINK_TTL", 168*time.Hour),
+		ClickFlushInterval:  envDuration("CLICK_FLUSH_INTERVAL", 30*time.Second),
+		LinkCleanupInterval: envDuration("LINK_CLEANUP_INTERVAL", time.Hour),
+		JWTSecret:           envOr("JWT_SECRET", "dev-jwt-secret-change-me"),
+		JWTTTL:              envDuration("JWT_TTL", 24*time.Hour),
 	}
 }
 

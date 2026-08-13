@@ -127,3 +127,16 @@ func (r *LinkRepository) ApplyClickDeltas(ctx context.Context, deltas map[uuid.U
 	}
 	return nil
 }
+
+// SoftDeleteExpired soft-deletes every link whose expires_at is older than
+// `before` and returns how many rows were purged. Used by the cleanup worker
+// so the table never accumulates dead rows; active links are untouched by the
+// WHERE clause, and already-deleted ones are not double-marked.
+func (r *LinkRepository) SoftDeleteExpired(ctx context.Context, before time.Time) (int64, error) {
+	query := `UPDATE links SET deleted_at = now(), updated_at = now() WHERE expires_at < $1 AND deleted_at IS NULL`
+	tag, err := r.pool.Exec(ctx, query, before)
+	if err != nil {
+		return 0, fmt.Errorf("soft delete expired: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
