@@ -32,15 +32,10 @@ func NewLinkService(links LinkStore, defaultTTL time.Duration, linkCache *cache.
 	return &LinkService{links: links, defaultTTL: defaultTTL, cache: linkCache, clicks: clicks}
 }
 
-// validateURL returns a normalized URL or ErrInvalidURL.
-//
-// url.Parse is surprisingly permissive: "notaurl" parses fine (empty Scheme and
-// Host), and "ftp://x" parses with a scheme you must reject. Check all three:
-//   - parse error -> ErrInvalidURL
-//   - u.Scheme is neither "http" nor "https" -> ErrInvalidURL
-//   - u.Host == "" -> ErrInvalidURL
-//
-// Return u.String() on success.
+// validateURL returns a normalized URL or ErrInvalidURL. url.Parse is
+// surprisingly permissive — "notaurl" parses fine (empty Scheme and Host) and
+// "ftp://x" parses with an unsupported scheme — so we require an http/https
+// scheme and a non-empty host.
 func validateURL(raw string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -87,11 +82,9 @@ func (s *LinkService) Get(ctx context.Context, id, ownerID uuid.UUID) (*model.Li
 }
 
 // Update replaces the URL and expiry of a link owned by ownerID (full replace,
-// no partials).
-//
-// validateURL(raw), then s.links.Update(ctx, id, ownerID, url, expiresAt).
-// The repo guards ownership and returns ErrNotFound when the link doesn't exist
-// or isn't yours.
+// no partials). The repo guards ownership and returns ErrNotFound when the
+// link doesn't exist or isn't yours. The cached entry is dropped so the
+// redirect picks up the new values.
 func (s *LinkService) Update(ctx context.Context, id, ownerID uuid.UUID, raw string, expiresAt time.Time) (*model.Link, error) {
 	u, err := validateURL(raw)
 	if err != nil {

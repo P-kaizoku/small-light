@@ -98,7 +98,6 @@ func main() {
 		cleanupWorker.Run(ctx)
 	}()
 
-	// error channel to pass error
 	errCh := make(chan error, 1)
 	go func() {
 		log.Info("server listening", "addr", srv.Addr)
