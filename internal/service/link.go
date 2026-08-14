@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/P-kaizoku/small-light/internal/cache"
 	"github.com/P-kaizoku/small-light/internal/model"
 	"github.com/google/uuid"
 )
@@ -21,14 +20,30 @@ type LinkStore interface {
 	SoftDelete(ctx context.Context, id, ownerID uuid.UUID) error
 }
 
+// LinkCache is the read-path cache for resolved links, keyed by short code.
+// Implemented by *cache.Link; defined here (at the consumer) so LinkService
+// can be unit-tested against a fake that never touches Redis.
+type LinkCache interface {
+	Get(ctx context.Context, code string) (*model.Link, bool)
+	Set(ctx context.Context, code string, link *model.Link)
+	Delete(ctx context.Context, code string)
+}
+
+// ClickIncrementer records one click for analytics. Implemented by
+// *cache.ClickCounter; a fake lets unit tests assert the click was recorded
+// without Redis.
+type ClickIncrementer interface {
+	Increment(ctx context.Context, id uuid.UUID)
+}
+
 type LinkService struct {
 	links      LinkStore
 	defaultTTL time.Duration
-	cache      *cache.Link
-	clicks     *cache.ClickCounter
+	cache      LinkCache
+	clicks     ClickIncrementer
 }
 
-func NewLinkService(links LinkStore, defaultTTL time.Duration, linkCache *cache.Link, clicks *cache.ClickCounter) *LinkService {
+func NewLinkService(links LinkStore, defaultTTL time.Duration, linkCache LinkCache, clicks ClickIncrementer) *LinkService {
 	return &LinkService{links: links, defaultTTL: defaultTTL, cache: linkCache, clicks: clicks}
 }
 
