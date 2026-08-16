@@ -58,6 +58,14 @@ cleanup worker (`LINK_CLEANUP_INTERVAL`, default 1h) removes expired links.
 
 Requires Go 1.26+ and Docker.
 
+Run the whole stack in Docker (server + Postgres + Redis):
+
+```sh
+make up          # docker compose up -d --build
+```
+
+Or run the server locally against containerized dependencies:
+
 ```sh
 # 1. Start Postgres and Redis
 make dc-up
@@ -66,7 +74,7 @@ make dc-up
 make run
 ```
 
-The server listens on `http://localhost:8080`. Try a full flow:
+In both cases the server listens on `http://localhost:8080`. Try a full flow:
 
 ```sh
 # Health check
@@ -177,10 +185,20 @@ migrations/          SQL schema
 
 ## Docker
 
-The `Dockerfile` is multi-stage (static binary, alpine runtime, non-root user).
-`docker-compose.yml` only runs Postgres and Redis for local development and
-testing — run the server binary itself (`make run`, `docker build`, or your
-favorite process manager).
+The `Dockerfile` is multi-stage: a static, `-trimpath -s -w` binary built with
+cached module/build mounts, running as a non-root user on `alpine:3.20` with a
+`/health` healthcheck.
+
+`docker-compose.yml` runs the entire stack — Postgres, Redis, and the app
+(waits on the DBs being healthy, exposes `8080`). One command:
+
+```sh
+make up          # docker compose up -d --build
+```
+
+Use `make dc-up` (DBs only) when you want to run the server via `make run`
+instead. For production, override the environment (at minimum a real
+`JWT_SECRET` and `APP_ENV=production`, which the server enforces at startup).
 
 ```sh
 docker build -t small-light .
