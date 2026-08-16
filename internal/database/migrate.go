@@ -32,6 +32,10 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	if err != nil {
 		return fmt.Errorf("migrate instance: %w", err)
 	}
+	// The pgx driver checks out a dedicated connection (advisory lock) and
+	// holds it until Close. Skipping this leaks that connection out of the
+	// pool forever — harmless in main(), fatal for tests that close the pool.
+	defer m.Close()
 
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("migrate up: %w", err)
